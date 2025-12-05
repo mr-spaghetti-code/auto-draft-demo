@@ -1,0 +1,286 @@
+import { useRef, useEffect, useCallback, useState } from 'react'
+import { useDraftCandidates } from '../hooks/useDraftCandidates'
+import { useSellerPreferences } from '../hooks/useSellerPreferences'
+import DraftCarousel from './DraftCarousel'
+
+export default function Composer({ caseData, onSend }) {
+  const textareaRef = useRef(null)
+  const improveInputRef = useRef(null)
+  const [draftContent, setDraftContent] = useState('')
+  const [selectedCandidateIndex, setSelectedCandidateIndex] = useState(null)
+  const [showImprovePopover, setShowImprovePopover] = useState(false)
+  const [improveInstruction, setImproveInstruction] = useState('')
+  const [isImproving, setIsImproving] = useState(false)
+  
+  const { preferences: sellerPreferences } = useSellerPreferences()
+  
+  const {
+    candidates,
+    isLoading,
+    error,
+    hasGenerated,
+    generateCandidates,
+    regenerateCandidates,
+  } = useDraftCandidates(caseData.id)
+
+  // Auto-resize textarea
+  useEffect(() => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+    
+    // Reset height to calculate proper scrollHeight
+    textarea.style.height = 'auto'
+    // Set height with min (3 lines ~72px) and max (~192px for 8 lines)
+    const newHeight = Math.min(Math.max(textarea.scrollHeight, 72), 192)
+    textarea.style.height = `${newHeight}px`
+  }, [draftContent])
+
+  // Clear draft content and selection when case changes
+  useEffect(() => {
+    setDraftContent('')
+    setSelectedCandidateIndex(null)
+  }, [caseData.id])
+
+  // Auto-generate candidates when opening a new thread (only if not already generated)
+  useEffect(() => {
+    if (!hasGenerated && !isLoading) {
+      generateCandidates(caseData, sellerPreferences)
+    }
+  }, [caseData.id, hasGenerated, isLoading, generateCandidates, caseData, sellerPreferences])
+
+  const handleCandidateSelect = useCallback((draft, index) => {
+    setDraftContent(draft)
+    setSelectedCandidateIndex(index)
+    // Focus the textarea after selection
+    textareaRef.current?.focus()
+  }, [])
+
+  const handleRegenerate = useCallback(() => {
+    setSelectedCandidateIndex(null)
+    regenerateCandidates(caseData, sellerPreferences)
+  }, [caseData, regenerateCandidates, sellerPreferences])
+
+  const handleSendClick = useCallback(() => {
+    if (!draftContent.trim()) return
+    onSend(draftContent.trim())
+    setDraftContent('')
+    setSelectedCandidateIndex(null)
+  }, [draftContent, onSend])
+
+  const handleTextChange = useCallback((e) => {
+    setDraftContent(e.target.value)
+    // Clear selection when user manually edits
+    if (selectedCandidateIndex !== null) {
+      setSelectedCandidateIndex(null)
+    }
+  }, [selectedCandidateIndex])
+
+  const handleKeyDown = useCallback((e) => {
+    // Cmd/Ctrl + Enter to send
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && draftContent.trim()) {
+      e.preventDefault()
+      handleSendClick()
+    }
+  }, [draftContent, handleSendClick])
+
+  // Focus improve input when popover opens
+  useEffect(() => {
+    if (showImprovePopover && improveInputRef.current) {
+      improveInputRef.current.focus()
+    }
+  }, [showImprovePopover])
+
+  // Close popover when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (showImprovePopover && !e.target.closest('.improve-popover-container')) {
+        setShowImprovePopover(false)
+        setImproveInstruction('')
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showImprovePopover])
+
+  const handleImproveClick = useCallback(() => {
+    if (!draftContent.trim()) return
+    setShowImprovePopover(true)
+  }, [draftContent])
+
+  const handleImproveSubmit = useCallback(async () => {
+    if (!improveInstruction.trim() || !draftContent.trim()) return
+    
+    setIsImproving(true)
+    try {
+      const response = await fetch('/api/improve-text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: draftContent,
+          instruction: improveInstruction.trim()
+        })
+      })
+      
+      if (!response.ok) {
+        throw new Error('Failed to improve text')
+      }
+      
+      const data = await response.json()
+      if (data.improvedText) {
+        setDraftContent(data.improvedText)
+        setSelectedCandidateIndex(null)
+      }
+    } catch (err) {
+      console.error('Error improving text:', err)
+    } finally {
+      setIsImproving(false)
+      setShowImprovePopover(false)
+      setImproveInstruction('')
+      textareaRef.current?.focus()
+    }
+  }, [draftContent, improveInstruction])
+
+  const handleImproveKeyDown = useCallback((e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleImproveSubmit()
+    } else if (e.key === 'Escape') {
+      setShowImprovePopover(false)
+      setImproveInstruction('')
+    }
+  }, [handleImproveSubmit])
+
+  const canSend = draftContent.trim().length > 0
+  const canImprove = draftContent.trim().length > 0
+
+  return (
+    <div className="px-6 py-4 bg-white border-t border-gray-200 flex-shrink-0">
+      {/* Draft Carousel */}
+      <DraftCarousel
+        candidates={candidates}
+        isLoading={isLoading}
+        error={error}
+        onSelect={handleCandidateSelect}
+        onRegenerate={handleRegenerate}
+        selectedIndex={selectedCandidateIndex}
+      />
+
+      {/* Textarea */}
+      <div className="relative">
+        <textarea
+          ref={textareaRef}
+          value={draftContent}
+          onChange={handleTextChange}
+          onKeyDown={handleKeyDown}
+          placeholder="Write your response..."
+          className="
+            w-full resize-none rounded-lg border border-gray-300 
+            bg-gray-50 px-4 py-3 text-sm text-gray-800
+            placeholder:text-gray-400
+            focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 focus:bg-white
+            transition-all
+          "
+          style={{ minHeight: '72px', maxHeight: '192px' }}
+        />
+      </div>
+
+      {/* Buttons */}
+      <div className="flex items-center justify-between mt-3">
+        <div className="text-xs text-gray-400">
+          {canSend && <span>⌘ + Enter to send</span>}
+        </div>
+        
+        <div className="flex items-center gap-2">
+          {/* Improve button with popover */}
+          <div className="relative improve-popover-container">
+            <button
+              onClick={handleImproveClick}
+              disabled={!canImprove || isImproving}
+              className={`
+                px-4 py-2 rounded-lg text-sm font-medium
+                transition-all duration-150
+                ${canImprove && !isImproving
+                  ? 'bg-purple-100 text-purple-700 hover:bg-purple-200 active:bg-purple-300 border border-purple-200'
+                  : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
+                }
+              `}
+            >
+              {isImproving ? (
+                <span className="flex items-center gap-2">
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Improving...
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  Improve
+                </span>
+              )}
+            </button>
+            
+            {/* Improve popover */}
+            {showImprovePopover && (
+              <div className="absolute bottom-full right-0 mb-2 w-72 bg-white rounded-lg shadow-xl border border-gray-200 p-3 z-10">
+                <div className="text-xs font-medium text-gray-600 mb-2">How should I improve this?</div>
+                <input
+                  ref={improveInputRef}
+                  type="text"
+                  value={improveInstruction}
+                  onChange={(e) => setImproveInstruction(e.target.value)}
+                  onKeyDown={handleImproveKeyDown}
+                  placeholder="e.g., make it more formal"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                />
+                <div className="flex justify-end gap-2 mt-2">
+                  <button
+                    onClick={() => {
+                      setShowImprovePopover(false)
+                      setImproveInstruction('')
+                    }}
+                    className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-800"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleImproveSubmit}
+                    disabled={!improveInstruction.trim()}
+                    className={`
+                      px-3 py-1.5 text-xs rounded-md font-medium
+                      ${improveInstruction.trim()
+                        ? 'bg-purple-600 text-white hover:bg-purple-700'
+                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      }
+                    `}
+                  >
+                    Apply
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Send button */}
+          <button
+            onClick={handleSendClick}
+            disabled={!canSend}
+            className={`
+              px-4 py-2 rounded-lg text-sm font-medium
+              transition-all duration-150
+              ${canSend
+                ? 'bg-teal-600 text-white hover:bg-teal-700 active:bg-teal-800 shadow-sm'
+                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              }
+            `}
+          >
+            Send
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
