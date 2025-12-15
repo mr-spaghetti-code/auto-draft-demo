@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import CaseList from './components/CaseList'
 import ThreadView from './components/ThreadView'
 import OrderDetails from './components/OrderDetails'
+import SellerSettingsModal from './components/SellerSettingsModal'
 import { initialCases } from './data/mockCases'
 
 function App() {
@@ -10,6 +11,7 @@ function App() {
   const [showOrderDetails, setShowOrderDetails] = useState(true)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [activeFilter, setActiveFilter] = useState('all')
+  const [showSettingsModal, setShowSettingsModal] = useState(false)
 
   const selectedCase = cases.find(c => c.id === selectedCaseId)
 
@@ -70,6 +72,14 @@ function App() {
     setShowOrderDetails(false)
   }, [])
 
+  const handleOpenSettings = useCallback(() => {
+    setShowSettingsModal(true)
+  }, [])
+
+  const handleCloseSettings = useCallback(() => {
+    setShowSettingsModal(false)
+  }, [])
+
   return (
     <div className="h-screen flex bg-white">
       {/* Left Sidebar - Case List */}
@@ -86,6 +96,7 @@ function App() {
           isCollapsed={sidebarCollapsed}
           activeFilter={activeFilter}
           onFilterChange={setActiveFilter}
+          onOpenSettings={handleOpenSettings}
           totalCounts={{
             all: cases.length,
             response_needed: cases.filter(c => c.status === 'needs_response').length,
@@ -127,6 +138,12 @@ function App() {
           />
         </aside>
       )}
+
+      {/* Settings Modal */}
+      <SellerSettingsModal 
+        isOpen={showSettingsModal}
+        onClose={handleCloseSettings}
+      />
     </div>
   )
 }

@@ -11,6 +11,7 @@ export default function Composer({ caseData, onSend }) {
   const [showImprovePopover, setShowImprovePopover] = useState(false)
   const [improveInstruction, setImproveInstruction] = useState('')
   const [isImproving, setIsImproving] = useState(false)
+  const [previousDraftContent, setPreviousDraftContent] = useState(null)
   
   const { preferences: sellerPreferences } = useSellerPreferences()
   
@@ -39,6 +40,7 @@ export default function Composer({ caseData, onSend }) {
   useEffect(() => {
     setDraftContent('')
     setSelectedCandidateIndex(null)
+    setPreviousDraftContent(null)
   }, [caseData.id])
 
   // Auto-generate candidates when opening a new thread (only if not already generated)
@@ -65,6 +67,7 @@ export default function Composer({ caseData, onSend }) {
     onSend(draftContent.trim())
     setDraftContent('')
     setSelectedCandidateIndex(null)
+    setPreviousDraftContent(null)
   }, [draftContent, onSend])
 
   const handleTextChange = useCallback((e) => {
@@ -111,6 +114,7 @@ export default function Composer({ caseData, onSend }) {
     if (!improveInstruction.trim() || !draftContent.trim()) return
     
     setIsImproving(true)
+    const contentBeforeImprove = draftContent
     try {
       const response = await fetch('/api/improve-text', {
         method: 'POST',
@@ -127,6 +131,7 @@ export default function Composer({ caseData, onSend }) {
       
       const data = await response.json()
       if (data.improvedText) {
+        setPreviousDraftContent(contentBeforeImprove)
         setDraftContent(data.improvedText)
         setSelectedCandidateIndex(null)
       }
@@ -139,6 +144,14 @@ export default function Composer({ caseData, onSend }) {
       textareaRef.current?.focus()
     }
   }, [draftContent, improveInstruction])
+
+  const handleRevertImprovement = useCallback(() => {
+    if (previousDraftContent !== null) {
+      setDraftContent(previousDraftContent)
+      setPreviousDraftContent(null)
+      textareaRef.current?.focus()
+    }
+  }, [previousDraftContent])
 
   const handleImproveKeyDown = useCallback((e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -175,9 +188,9 @@ export default function Composer({ caseData, onSend }) {
           placeholder="Write your response..."
           className="
             w-full resize-none rounded-lg border border-gray-300 
-            bg-gray-50 px-4 py-3 text-sm text-gray-800
+            bg-white px-4 py-3 text-sm text-gray-800
             placeholder:text-gray-400
-            focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 focus:bg-white
+            focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500
             transition-all
           "
           style={{ minHeight: '72px', maxHeight: '192px' }}
@@ -191,6 +204,21 @@ export default function Composer({ caseData, onSend }) {
         </div>
         
         <div className="flex items-center gap-2">
+          {/* Revert button - only shows after an improvement was applied */}
+          {previousDraftContent !== null && (
+            <button
+              onClick={handleRevertImprovement}
+              className="px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 bg-gray-100 text-gray-600 hover:bg-gray-200 active:bg-gray-300 border border-gray-200"
+            >
+              <span className="flex items-center gap-1.5">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                </svg>
+                Revert
+              </span>
+            </button>
+          )}
+
           {/* Improve button with popover */}
           <div className="relative improve-popover-container">
             <button
@@ -234,7 +262,7 @@ export default function Composer({ caseData, onSend }) {
                   onChange={(e) => setImproveInstruction(e.target.value)}
                   onKeyDown={handleImproveKeyDown}
                   placeholder="e.g., make it more formal"
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  className="w-full px-3 py-2 text-sm text-gray-900 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                 />
                 <div className="flex justify-end gap-2 mt-2">
                   <button
