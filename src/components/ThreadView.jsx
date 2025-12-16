@@ -21,7 +21,7 @@ function USFlag({ className }) {
   )
 }
 
-export default function ThreadView({ caseData, onSendMessage }) {
+export default function ThreadView({ caseData, onSendMessage, onOpenSettings }) {
   const messagesEndRef = useRef(null)
   const messagesContainerRef = useRef(null)
   const [isUserScrolled, setIsUserScrolled] = useState(false)
@@ -130,6 +130,7 @@ export default function ThreadView({ caseData, onSendMessage }) {
       <Composer 
         caseData={caseData}
         onSend={handleSend}
+        onOpenSettings={onOpenSettings}
       />
     </div>
   )

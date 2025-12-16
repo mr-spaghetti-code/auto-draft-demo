@@ -1,15 +1,11 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import FeedbackModal from './FeedbackModal'
 
 // Skeleton loader for individual card
 function CardSkeleton() {
   return (
-    <div className="flex-shrink-0 w-full px-1">
+    <div className="w-full">
       <div className="bg-gray-100 rounded-lg p-4 h-[200px] animate-pulse">
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-4 h-4 bg-gray-200 rounded" />
-          <div className="h-3 bg-gray-200 rounded w-20" />
-        </div>
         <div className="space-y-2">
           <div className="h-3 bg-gray-200 rounded w-full" />
           <div className="h-3 bg-gray-200 rounded w-full" />
@@ -25,15 +21,12 @@ function CardSkeleton() {
 }
 
 // Individual draft card
-function DraftCard({ draft, index, isActive, onClick }) {
-  const labels = ['Concise', 'Detailed', 'Warm']
-  const icons = ['⚡', '📝', '💬']
-  
+function DraftCard({ draft, isActive, onClick }) {
   // Truncate text for preview (~350 chars fits well in 200px card)
   const preview = draft.length > 350 ? draft.slice(0, 350) + '...' : draft
 
   return (
-    <div className="flex-shrink-0 w-full px-1">
+    <div className="w-full">
       <button
         onClick={onClick}
         className={`
@@ -45,15 +38,11 @@ function DraftCard({ draft, index, isActive, onClick }) {
           }
         `}
       >
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-sm">{icons[index]}</span>
-          <span className={`text-xs font-medium ${isActive ? 'text-teal-700' : 'text-gray-500'}`}>
-            {labels[index]}
-          </span>
-          {isActive && (
-            <span className="ml-auto text-xs text-teal-600 font-medium">Selected</span>
-          )}
-        </div>
+        {isActive && (
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs text-teal-600 font-medium">Selected</span>
+          </div>
+        )}
         <p className={`text-sm leading-relaxed whitespace-pre-wrap ${isActive ? 'text-teal-900' : 'text-gray-600'}`}>
           {preview}
         </p>
@@ -69,23 +58,14 @@ export default function DraftCarousel({
   onSelect, 
   onRegenerate,
   selectedIndex,
+  onOpenSettings,
 }) {
-  const [activeIndex, setActiveIndex] = useState(0)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [showFeedbackModal, setShowFeedbackModal] = useState(false)
 
-  const handleSelect = useCallback((index) => {
-    setActiveIndex(index)
-    onSelect?.(candidates[index], index)
+  const handleSelect = useCallback(() => {
+    onSelect?.(candidates[0], 0)
   }, [candidates, onSelect])
-
-  const handlePrev = useCallback(() => {
-    setActiveIndex(prev => (prev > 0 ? prev - 1 : candidates.length - 1))
-  }, [candidates.length])
-
-  const handleNext = useCallback(() => {
-    setActiveIndex(prev => (prev < candidates.length - 1 ? prev + 1 : 0))
-  }, [candidates.length])
 
   // Loading state
   if (isLoading) {
@@ -97,13 +77,11 @@ export default function DraftCarousel({
             <span className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
             <span className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
           </span>
-          <span className="text-xs text-gray-500">Generating drafts...</span>
+          <span className="text-xs text-gray-500">Generating draft...</span>
         </div>
         {!isCollapsed && (
           <div className="relative">
-            <div className="flex gap-2">
-              <CardSkeleton />
-            </div>
+            <CardSkeleton />
           </div>
         )}
       </div>
@@ -149,12 +127,19 @@ export default function DraftCarousel({
             >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
-            ✨ AI Suggestions
-            {isCollapsed && (
-              <span className="text-gray-400 font-normal normal-case tracking-normal">
-                ({candidates.length} available)
-              </span>
-            )}
+            ✨ Inbox Agent Suggestion
+          </button>
+
+          {/* Refresh button */}
+          <button
+            onClick={onRegenerate}
+            className="p-1 rounded text-gray-400 hover:text-teal-600 hover:bg-teal-50 transition-colors"
+            aria-label="Regenerate suggestion"
+            title="Regenerate suggestion"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
           </button>
 
           {/* Report AI Issue button */}
@@ -169,49 +154,19 @@ export default function DraftCarousel({
             </svg>
           </button>
         </div>
-        
-        {!isCollapsed && (
-          <div className="flex items-center gap-2">
-            {/* Navigation dots */}
-            <div className="flex items-center gap-1.5">
-              {candidates.map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setActiveIndex(i)}
-                  className={`
-                    w-2 h-2 rounded-full transition-all duration-150
-                    ${i === activeIndex 
-                      ? 'bg-teal-500 w-4' 
-                      : 'bg-gray-300 hover:bg-gray-400'
-                    }
-                  `}
-                  aria-label={`Go to draft ${i + 1}`}
-                />
-              ))}
-            </div>
-            {/* Prev/Next arrows */}
-            <div className="flex items-center gap-1 ml-2">
-              <button
-                onClick={handlePrev}
-                className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-                aria-label="Previous draft"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              <button
-                onClick={handleNext}
-                className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-                aria-label="Next draft"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            </div>
-          </div>
-        )}
+
+        {/* AI Settings button - right side */}
+        <button
+          onClick={onOpenSettings}
+          className="p-1 rounded text-gray-400 hover:text-teal-600 hover:bg-teal-50 transition-colors"
+          aria-label="Inbox Agent Settings"
+          title="Inbox Agent Settings"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </button>
       </div>
 
       {/* Collapsible content */}
@@ -221,33 +176,12 @@ export default function DraftCarousel({
           ${isCollapsed ? 'max-h-0 opacity-0' : 'max-h-[300px] opacity-100'}
         `}
       >
-        {/* Carousel container */}
-        <div className="relative overflow-hidden">
-          <div 
-            className="flex transition-transform duration-300 ease-out"
-            style={{ transform: `translateX(-${activeIndex * 100}%)` }}
-          >
-            {candidates.map((draft, index) => (
-              <DraftCard
-                key={index}
-                draft={draft}
-                index={index}
-                isActive={selectedIndex === index}
-                onClick={() => handleSelect(index)}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* Regenerate link */}
-        <div className="flex justify-center mt-3">
-          <button
-            onClick={onRegenerate}
-            className="text-xs text-gray-400 hover:text-teal-600 transition-colors"
-          >
-            Regenerate suggestions
-          </button>
-        </div>
+        {/* Single draft card */}
+        <DraftCard
+          draft={candidates[0]}
+          isActive={selectedIndex === 0}
+          onClick={handleSelect}
+        />
       </div>
 
       {/* Feedback Modal */}
@@ -258,4 +192,3 @@ export default function DraftCarousel({
     </div>
   )
 }
-

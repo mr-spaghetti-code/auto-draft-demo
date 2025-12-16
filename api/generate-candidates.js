@@ -156,11 +156,7 @@ ${threadXml}
 </thread>
 </case>
 
-Generate exactly 3 distinct draft responses to the most recent buyer message. Each draft should take a slightly different approach:
-
-1. **Concise**: A brief, efficient response that gets straight to the solution
-2. **Detailed**: A more thorough response with additional context or explanation  
-3. **Warm**: An especially empathetic response that emphasizes understanding`
+Generate a single professional draft response to the most recent buyer message. The response should be empathetic, solution-focused, and appropriately concise.`
 
     const response = await client.beta.messages.create({
       model: 'claude-sonnet-4-5',

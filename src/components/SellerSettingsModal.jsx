@@ -186,7 +186,7 @@ export default function SellerSettingsModal({ isOpen, onClose }) {
                 </svg>
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">AI Settings</h2>
+                <h2 className="text-lg font-semibold text-gray-900">Inbox Agent Settings</h2>
                 <p className="text-sm text-gray-500">Customize how your AI automation responds to customers</p>
               </div>
             </div>

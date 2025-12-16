@@ -3,7 +3,7 @@ import { useDraftCandidates } from '../hooks/useDraftCandidates'
 import { useSellerPreferences } from '../hooks/useSellerPreferences'
 import DraftCarousel from './DraftCarousel'
 
-export default function Composer({ caseData, onSend }) {
+export default function Composer({ caseData, onSend, onOpenSettings }) {
   const textareaRef = useRef(null)
   const improveInputRef = useRef(null)
   const [draftContent, setDraftContent] = useState('')
@@ -176,6 +176,7 @@ export default function Composer({ caseData, onSend }) {
         onSelect={handleCandidateSelect}
         onRegenerate={handleRegenerate}
         selectedIndex={selectedCandidateIndex}
+        onOpenSettings={onOpenSettings}
       />
 
       {/* Textarea */}

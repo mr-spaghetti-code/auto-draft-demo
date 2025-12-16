@@ -96,7 +96,6 @@ function App() {
           isCollapsed={sidebarCollapsed}
           activeFilter={activeFilter}
           onFilterChange={setActiveFilter}
-          onOpenSettings={handleOpenSettings}
           totalCounts={{
             all: cases.length,
             response_needed: cases.filter(c => c.status === 'needs_response').length,
@@ -121,6 +120,7 @@ function App() {
           <ThreadView 
             caseData={selectedCase}
             onSendMessage={handleSendMessage}
+            onOpenSettings={handleOpenSettings}
           />
         ) : (
           <div className="h-full flex items-center justify-center text-gray-400">
