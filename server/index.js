@@ -322,6 +322,57 @@ Output ONLY the improved message text. Do not include any preamble, explanation,
   }
 })
 
+// Agent feedback chat endpoint
+app.post('/api/agent-feedback', async (req, res) => {
+  const { messages } = req.body
+
+  if (!messages || !Array.isArray(messages) || messages.length === 0) {
+    return res.status(400).json({ error: 'messages array is required' })
+  }
+
+  const apiKey = process.env.ANTHROPIC_API_KEY
+
+  if (!apiKey) {
+    return res.status(500).json({ error: 'API key not configured.' })
+  }
+
+  const agentFeedbackSystemPrompt = `You are the Seller Assistant AI — a smart customer messaging agent built into a seller's inbox tool. You help sellers draft replies to buyer messages on marketplace platforms.
+
+A seller is now talking to you directly to give you feedback about how you respond. Your job is to:
+- Listen carefully and acknowledge their feedback warmly but concisely
+- Confirm what you'll do differently going forward (be specific)
+- Ask a clarifying follow-up if the instruction is vague
+- Keep replies short — 1 to 3 sentences max
+- Never be defensive; always be receptive and helpful
+- Speak in first person as the assistant ("Got it, I'll...", "Understood — I'll make sure to...", etc.)
+
+Examples:
+User: "Can you reply more professionally?"
+You: "Got it — I'll keep responses formal, avoid casual language, and use complete sentences from now on. Anything specific you'd like me to change about the tone?"
+
+User: "Stop apologizing so much"
+You: "Understood. I'll cut the excessive apologies and keep things direct while still being polite."
+
+User: "Make your drafts shorter"
+You: "Got it — I'll aim for concise replies, ideally under 3 sentences, unless the question genuinely requires more detail."`
+
+  try {
+    const client = new Anthropic({ apiKey })
+
+    const response = await client.messages.create({
+      model: 'claude-haiku-4-5',
+      max_tokens: 256,
+      system: agentFeedbackSystemPrompt,
+      messages,
+    })
+
+    res.json({ reply: response.content[0].text })
+  } catch (error) {
+    console.error('Error in agent feedback:', error)
+    res.status(500).json({ error: error.message || 'Failed to get response' })
+  }
+})
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' })

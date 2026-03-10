@@ -1,4 +1,47 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
+
+const RECOMMENDATIONS = [
+  {
+    id: 'return-sop',
+    impact: 'High Impact',
+    impactColor: 'red',
+    title: '20% of suggested responses aren\'t accepted due to missing context',
+    description: 'Upload your Return Policy SOP so the assistant can reference accurate return procedures.',
+    cta: 'Upload Return Policy SOP',
+    action: 'upload',
+    uploadLabel: 'Return Policy SOP',
+  },
+  {
+    id: 'shipping-info',
+    impact: 'Medium Impact',
+    impactColor: 'amber',
+    title: 'Shipping questions are being answered too generically',
+    description: 'Add detailed shipping info — carriers, cutoff times, and international rules — to improve draft accuracy.',
+    cta: 'Add Shipping Details',
+    action: 'navigate',
+    navigateTo: 'policies',
+  },
+  {
+    id: 'tone-mismatch',
+    impact: 'Medium Impact',
+    impactColor: 'amber',
+    title: 'Buyers are responding better to a friendlier tone',
+    description: 'Your current style is set to "Professional". Switching to "Friendly" may increase response acceptance.',
+    cta: 'Update Response Style',
+    action: 'navigate',
+    navigateTo: 'responses',
+  },
+  {
+    id: 'product-docs',
+    impact: 'Low Impact',
+    impactColor: 'blue',
+    title: 'Technical questions lack product-specific context',
+    description: 'Upload product manuals or spec sheets so the assistant can answer warranty and troubleshooting questions accurately.',
+    cta: 'Upload Product Docs',
+    action: 'upload',
+    uploadLabel: 'Product Documentation',
+  },
+]
 
 const mockUploadedFiles = [
   { id: 1, name: 'Return_Policy_2024.pdf', size: '245 KB', uploadedAt: 'Dec 10, 2025' },
@@ -57,14 +100,68 @@ const mockPreferences = {
 
 export default function SellerSettingsModal({ isOpen, onClose }) {
   const [preferences, setPreferences] = useState(mockPreferences)
-  const [activeTab, setActiveTab] = useState('policies')
+  const [activeTab, setActiveTab] = useState('recommendations')
   const [saved, setSaved] = useState(false)
   const [uploadedFiles, setUploadedFiles] = useState(mockUploadedFiles)
   const [isDragging, setIsDragging] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [extractedInsights, setExtractedInsights] = useState([])
   const [appliedInsights, setAppliedInsights] = useState(new Set())
+  const [resolvedRecommendations, setResolvedRecommendations] = useState(new Set())
+  const [pendingUploadRec, setPendingUploadRec] = useState(null)
+  const [chatMessages, setChatMessages] = useState([
+    { role: 'assistant', content: "Hey! I'm your Seller Assistant. Tell me how you'd like me to change the way I respond — tone, length, style, anything." }
+  ])
+  const [chatInput, setChatInput] = useState('')
+  const [isChatLoading, setIsChatLoading] = useState(false)
   const fileInputRef = useRef(null)
+  const recFileInputRef = useRef(null)
+  const chatBottomRef = useRef(null)
+  const chatInputRef = useRef(null)
+
+  const handleChatSend = useCallback(async () => {
+    const text = chatInput.trim()
+    if (!text || isChatLoading) return
+
+    const userMsg = { role: 'user', content: text }
+    const updatedMessages = [...chatMessages, userMsg]
+    setChatMessages(updatedMessages)
+    setChatInput('')
+    setIsChatLoading(true)
+
+    try {
+      const res = await fetch('/api/agent-feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          // Skip the initial greeting (index 0) so the API receives user/assistant turns only
+          messages: updatedMessages.slice(1).map(m => ({ role: m.role, content: m.content })),
+        }),
+      })
+      const data = await res.json()
+      if (data.reply) {
+        setChatMessages(prev => [...prev, { role: 'assistant', content: data.reply }])
+      }
+    } catch {
+      setChatMessages(prev => [...prev, { role: 'assistant', content: "Sorry, I couldn't process that. Please try again." }])
+    } finally {
+      setIsChatLoading(false)
+    }
+  }, [chatInput, chatMessages, isChatLoading])
+
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [chatMessages, isChatLoading])
+
+  const handleRecommendationAction = useCallback((rec) => {
+    if (rec.action === 'navigate') {
+      setActiveTab(rec.navigateTo)
+      setResolvedRecommendations(prev => new Set([...prev, rec.id]))
+    } else if (rec.action === 'upload') {
+      setPendingUploadRec(rec)
+      recFileInputRef.current?.click()
+    }
+  }, [])
 
   if (!isOpen) return null
 
@@ -158,15 +255,42 @@ export default function SellerSettingsModal({ isOpen, onClose }) {
     setPreferences(prev => ({ ...prev, [field]: value }))
   }
 
+  const handleRecFileSelect = (e) => {
+    const files = e.target.files
+    if (files && files.length > 0 && pendingUploadRec) {
+      const newFiles = Array.from(files).map((file, index) => ({
+        id: Date.now() + index,
+        name: file.name,
+        size: formatFileSize(file.size),
+        uploadedAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      }))
+      setUploadedFiles(prev => [...prev, ...newFiles])
+      setResolvedRecommendations(prev => new Set([...prev, pendingUploadRec.id]))
+      setPendingUploadRec(null)
+    }
+    if (recFileInputRef.current) recFileInputRef.current.value = ''
+  }
+
   const tabs = [
+    { id: 'recommendations', label: 'Recommendations', icon: 'lightbulb' },
+    { id: 'improve', label: 'Improve', icon: 'sparkle' },
     { id: 'policies', label: 'Policies', icon: 'document' },
     { id: 'responses', label: 'Response Style', icon: 'chat' },
-    { id: 'products', label: 'Products', icon: 'cube' },
     { id: 'documents', label: 'Documents', icon: 'upload' },
   ]
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
+      {/* Hidden file input for recommendation uploads */}
+      <input
+        ref={recFileInputRef}
+        type="file"
+        multiple
+        onChange={handleRecFileSelect}
+        className="hidden"
+        accept=".pdf,.doc,.docx,.txt,.csv,.xlsx,.xls"
+      />
+
       {/* Backdrop */}
       <div 
         className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
@@ -175,7 +299,7 @@ export default function SellerSettingsModal({ isOpen, onClose }) {
       
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
-        <div className="relative w-full max-w-2xl bg-white rounded-xl shadow-2xl transform transition-all">
+        <div className="relative w-full max-w-3xl bg-white rounded-xl shadow-2xl transform transition-all">
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
             <div className="flex items-center gap-3">
@@ -219,7 +343,152 @@ export default function SellerSettingsModal({ isOpen, onClose }) {
           </div>
 
           {/* Content */}
-          <div className="p-6 max-h-[60vh] overflow-y-auto">
+          <div className={`p-6 ${activeTab === 'improve' ? '' : 'max-h-[60vh] overflow-y-auto'}`}>
+            {activeTab === 'recommendations' && (
+              <div className="space-y-3">
+                <p className="text-sm text-gray-500 mb-4">
+                  Based on your drafting activity, here are actions that can improve suggestion quality.
+                </p>
+                {RECOMMENDATIONS.map(rec => {
+                  const resolved = resolvedRecommendations.has(rec.id)
+                  const impactStyles = {
+                    red: 'bg-red-50 text-red-700 border-red-200',
+                    amber: 'bg-amber-50 text-amber-700 border-amber-200',
+                    blue: 'bg-blue-50 text-blue-700 border-blue-200',
+                  }
+                  return (
+                    <div
+                      key={rec.id}
+                      className={`rounded-xl border p-4 transition-all duration-200 ${
+                        resolved
+                          ? 'bg-gray-50 border-gray-200 opacity-60'
+                          : 'bg-white border-gray-200 hover:border-teal-300 hover:shadow-sm'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        {/* Check indicator */}
+                        <div className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 transition-all ${
+                          resolved
+                            ? 'bg-teal-500 border-teal-500'
+                            : 'border-gray-300'
+                        }`}>
+                          {resolved && (
+                            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border ${impactStyles[rec.impactColor]}`}>
+                              {rec.impact}
+                            </span>
+                          </div>
+                          <p className={`text-sm font-medium mb-1 ${resolved ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+                            {rec.title}
+                          </p>
+                          <p className="text-xs text-gray-500 mb-3">{rec.description}</p>
+                          {!resolved && (
+                            <button
+                              onClick={() => handleRecommendationAction(rec)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-teal-600 text-white hover:bg-teal-700 transition-colors shadow-sm"
+                            >
+                              {rec.action === 'upload' ? (
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                </svg>
+                              ) : (
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                                </svg>
+                              )}
+                              {rec.cta}
+                            </button>
+                          )}
+                          {resolved && (
+                            <span className="text-xs text-teal-600 font-medium">Done</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {activeTab === 'improve' && (
+              <div className="flex flex-col" style={{ height: '420px' }}>
+                <p className="text-sm text-gray-500 mb-3 flex-shrink-0">
+                  Tell me how you'd like me to respond differently — tone, length, what to avoid, anything.
+                </p>
+
+                {/* Chat messages */}
+                <div className="flex-1 overflow-y-auto space-y-3 pr-1 mb-3">
+                  {chatMessages.map((msg, i) => (
+                    <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      {msg.role === 'assistant' && (
+                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-teal-500 to-teal-600 flex items-center justify-center flex-shrink-0 mr-2 mt-0.5">
+                          <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                          </svg>
+                        </div>
+                      )}
+                      <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-sm leading-relaxed ${
+                        msg.role === 'user'
+                          ? 'bg-teal-600 text-white rounded-tr-sm'
+                          : 'bg-gray-100 text-gray-800 rounded-tl-sm'
+                      }`}>
+                        {msg.content}
+                      </div>
+                    </div>
+                  ))}
+                  {isChatLoading && (
+                    <div className="flex justify-start">
+                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-teal-500 to-teal-600 flex items-center justify-center flex-shrink-0 mr-2 mt-0.5">
+                        <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                      </div>
+                      <div className="bg-gray-100 rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                      </div>
+                    </div>
+                  )}
+                  <div ref={chatBottomRef} />
+                </div>
+
+                {/* Input */}
+                <div className="flex items-center gap-2 flex-shrink-0 border-t border-gray-200 pt-3">
+                  <input
+                    ref={chatInputRef}
+                    type="text"
+                    value={chatInput}
+                    onChange={e => setChatInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleChatSend() } }}
+                    placeholder="e.g. Reply more professionally..."
+                    disabled={isChatLoading}
+                    className="flex-1 px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 disabled:opacity-50"
+                  />
+                  <button
+                    onClick={handleChatSend}
+                    disabled={!chatInput.trim() || isChatLoading}
+                    className={`p-2 rounded-lg transition-colors ${
+                      chatInput.trim() && !isChatLoading
+                        ? 'bg-teal-600 text-white hover:bg-teal-700'
+                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    }`}
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            )}
+
             {activeTab === 'policies' && (
               <div className="space-y-5">
                 <div>
@@ -327,38 +596,6 @@ export default function SellerSettingsModal({ isOpen, onClose }) {
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
-
-            {activeTab === 'products' && (
-              <div className="space-y-5">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Product & Warranty Notes
-                  </label>
-                  <textarea
-                    value={preferences.productNotes}
-                    onChange={(e) => handleChange('productNotes', e.target.value)}
-                    rows={4}
-                    className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-800 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-shadow resize-none"
-                    placeholder="Information about warranties, product care, etc..."
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Common Issues & Solutions
-                  </label>
-                  <textarea
-                    value={preferences.commonIssues}
-                    onChange={(e) => handleChange('commonIssues', e.target.value)}
-                    rows={4}
-                    className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-800 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-shadow resize-none"
-                    placeholder="Troubleshooting tips, FAQ answers, known issues..."
-                  />
-                  <p className="mt-1.5 text-xs text-gray-500">Help the AI answer technical questions accurately</p>
-                </div>
-
               </div>
             )}
 
@@ -630,6 +867,18 @@ export default function SellerSettingsModal({ isOpen, onClose }) {
 
 function TabIcon({ type, className }) {
   switch (type) {
+    case 'lightbulb':
+      return (
+        <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+        </svg>
+      )
+    case 'sparkle':
+      return (
+        <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+        </svg>
+      )
     case 'document':
       return (
         <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">

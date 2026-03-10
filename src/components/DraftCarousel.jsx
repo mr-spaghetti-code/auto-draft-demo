@@ -127,19 +127,7 @@ export default function DraftCarousel({
             >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
-            ✨ Inbox Agent Suggestion
-          </button>
-
-          {/* Refresh button */}
-          <button
-            onClick={onRegenerate}
-            className="p-1 rounded text-gray-400 hover:text-teal-600 hover:bg-teal-50 transition-colors"
-            aria-label="Regenerate suggestion"
-            title="Regenerate suggestion"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
+            ✨ Seller Assistant Suggestion
           </button>
 
           {/* Report AI Issue button */}
